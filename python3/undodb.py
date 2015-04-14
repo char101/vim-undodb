@@ -3,8 +3,12 @@ import sqlite3
 import tempfile
 import vim
 
+IGNORE_EXTS = {'.txt'}
+
 conn = sqlite3.connect(os.path.join(vim.eval('$VIMFILES'), 'undo.sqlite'))
 curr = conn.cursor()
+curr.execute('pragma synchronous = off')
+curr.execute('pragma journal_mode = wal')
 curr.execute('create table if not exists undo (f text not null primary key, u blob)')
 
 class Undofile:
@@ -19,18 +23,22 @@ class Undofile:
         if os.path.isfile(self.temp.name):
             os.unlink(self.temp.name)
 
-def valid():
+def skipped():
     if vim.eval('&modifiable') == '0':
-        return False
+        return True
 
     bufpath = vim.current.buffer.name
     if bufpath is None or bufpath == '':
-        return False
+        return True
 
-    return True
+    ext = os.path.splitext(bufpath)[1].lower()
+    if ext in IGNORE_EXTS:
+        return True
+
+    return False
 
 def write():
-    if not valid():
+    if skipped():
         return
     bufpath = vim.current.buffer.name.lower()
     with Undofile() as temp:
@@ -48,7 +56,7 @@ def write():
         conn.commit()
 
 def read():
-    if not valid():
+    if skipped():
         return
     bufpath = vim.current.buffer.name.lower()
     with Undofile() as temp:
